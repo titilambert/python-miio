@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from datetime import timedelta
 from enum import Enum
-from typing import Any, List, Dict, Optional
+from typing import Dict, List, Optional
 
 import click
 
@@ -41,6 +41,7 @@ ERROR_CODES = {
     2103: "Charging",
     2105: "Fully charged",
 }
+
 
 class ViomiConsumableStatus(ConsumableStatus):
     def __init__(self, data: List[int]) -> None:
