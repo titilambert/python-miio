@@ -174,19 +174,15 @@ class ViomiMopMode(Enum):
 
 class ViomiVacuumStatus:
     def __init__(self, data):
-        # ["run_state","mode","err_state","battary_life","box_type","mop_type","s_time","s_area",
-        # [ 5,          0,     2103,       85,            3,         1,         0,       0,
-        # "suction_grade","water_grade","remember_map","has_map","is_mop","has_newmap"]'
-        # 1,               11,           1,            1,         1,       0          ]
-        self.data = data
+        self._data = data
 
     @property
     def state(self):
         """State of the vacuum."""
         try:
-            return ViomiVacuumState(self.data["run_state"])
+            return ViomiVacuumState(self._data["run_state"])
         except ValueError:
-            _LOGGER.warning("Unknown vacuum state: %s", self.data["run_state"])
+            _LOGGER.warning("Unknown vacuum state: %s", self._data["run_state"])
             return ViomiVacuumState.Unknown
 
     @property
@@ -204,17 +200,17 @@ class ViomiVacuumStatus:
 
         TODO: is this same as mop_type property?
         """
-        return ViomiMode(self.data["mode"])
+        return ViomiMode(self._data["mode"])
 
     @property
     def mop_type(self):
         """Unknown mop_type values."""
-        return self.data["mop_type"]
+        return self._data["mop_type"]
 
     @property
     def error_code(self) -> int:
         """Error code from vacuum."""
-        return self.data["err_state"]
+        return self._data["err_state"]
 
     @property
     def error(self) -> Optional[str]:
@@ -227,47 +223,47 @@ class ViomiVacuumStatus:
     @property
     def battery(self) -> int:
         """Battery in percentage."""
-        return self.data["battary_life"]
+        return self._data["battary_life"]
 
     @property
     def bin_type(self) -> ViomiBinType:
         """Type of the inserted bin."""
-        return ViomiBinType(self.data["box_type"])
+        return ViomiBinType(self._data["box_type"])
 
     @property
     def clean_time(self) -> timedelta:
         """Cleaning time."""
-        return pretty_seconds(self.data["s_time"])
+        return pretty_seconds(self._data["s_time"])
 
     @property
     def clean_area(self) -> float:
         """Cleaned area in square meters."""
-        return self.data["s_area"]
+        return self._data["s_area"]
 
     @property
     def fanspeed(self) -> ViomiVacuumSpeed:
         """Current fan speed."""
-        return ViomiVacuumSpeed(self.data["suction_grade"])
+        return ViomiVacuumSpeed(self._data["suction_grade"])
 
     @property
     def water_grade(self) -> ViomiWaterGrade:
         """Water grade."""
-        return ViomiWaterGrade(self.data["water_grade"])
+        return ViomiWaterGrade(self._data["water_grade"])
 
     @property
     def remember_map(self) -> bool:
         """True to remember the map."""
-        return bool(self.data["remember_map"])
+        return bool(self._data["remember_map"])
 
     @property
     def has_map(self) -> bool:
         """True if device has map?"""
-        return bool(self.data["has_map"])
+        return bool(self._data["has_map"])
 
     @property
     def has_new_map(self) -> bool:
         """TODO: unknown"""
-        return bool(self.data["has_newmap"])
+        return bool(self._data["has_newmap"])
 
     @property
     def mop_mode(self) -> ViomiMode:
@@ -275,7 +271,117 @@ class ViomiVacuumStatus:
 
         TODO: is this really the same as mode?
         """
-        return ViomiMode(self.data["is_mop"])
+        return ViomiMode(self._data["is_mop"])
+
+    @property
+    def current_map_id(self) -> float:
+        """Current map id."""
+        return self._data["cur_mapid"]
+
+    @property
+    def hw_info(self) -> str:
+        """Hardware info."""
+        return self._data["hw_info"]
+
+    @property
+    def sw_info(self) -> str:
+        """SoftWare info."""
+        return self._data["sw_info"]
+
+    @property
+    def hypa_hours_left(self) -> int:
+        """HYPA left hours."""
+        return self._data["hypa_hours"]
+
+    @property
+    def hypa_life_left(self) -> int:
+        """HYPA left life percent."""
+        return self._data["hypa_life"]
+
+    @property
+    def charging(self) -> bool:
+        """FIXME: True if device is charging?"""
+        return bool(self._data["is_charge"])
+
+    @property
+    def working(self) -> bool:
+        """FIXME: True if device is working?"""
+        return bool(self._data["is_work"])
+
+    @property
+    def light_state(self) -> bool:
+        """FIXME: True if device ?"""
+        return bool(self._data["light_state"])
+
+    @property
+    def main_brush_hours_left(self) -> int:
+        """Main brush left hours."""
+        return self._data["main_brush_hours"]
+
+    @property
+    def main_brush_life_left(self) -> int:
+        """Main brush left life percent."""
+        return self._data["main_brush_life"]
+
+    @property
+    def map_number(self) -> int:
+        """Number of saved maps."""
+        return self._data["map_num"]
+
+    @property
+    def mop_hours_left(self) -> int:
+        """Mop left hours."""
+        return self._data["mop_hours"]
+
+    @property
+    def mop_life_left(self) -> int:
+        """Mop left life percent."""
+        return self._data["mop_life"]
+
+    @property
+    def mop_route(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["mop_route"]
+
+    @property
+    def order_time(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["order_time"]
+
+    @property
+    def repeat_state(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["repeat_state"]
+
+    @property
+    def side_brush_hours_left(self) -> int:
+        """Side brush left hours."""
+        return self._data["side_brush_hours"]
+
+    @property
+    def side_brush_life_left(self) -> int:
+        """Side brush left life percent."""
+        return self._data["side_brush_life"]
+
+    @property
+    def start_time(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["start_time"]
+
+    @property
+    def v_state(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["v_state"]
+
+    @property
+    def water_percent(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["water_percent"]
+
+    @property
+    def zone_data(self) -> int:
+        """FIXME: ??? int or bool."""
+        return self._data["zone_data"]
 
 
 class ViomiVacuum(Device):
@@ -283,40 +389,99 @@ class ViomiVacuum(Device):
 
     @command(
         default_output=format_output(
-            "",
+            "\n",
+            "General\n"
+            "=======\n\n"
             "State: {result.state}\n"
-            "Mode: {result.mode}\n"
             "Error: {result.error}\n"
+            "Mode: {result.mode}\n"
             "Battery: {result.battery}\n"
-            "Fan speed: {result.fanspeed}\n"
             "Box type: {result.bin_type}\n"
-            "Mop type: {result.mop_type}\n"
+            "Fan speed: {result.fanspeed}\n"
+            "Water grade: {result.water_grade}\n"
+            "Mop mode: {result.mop_mode}\n"
             "Clean time: {result.clean_time}\n"
             "Clean area: {result.clean_area}\n"
-            "Water grade: {result.water_grade}\n"
+            "\n"
+            "Consumables\n"
+            "===========\n\n"
+            "* Left hours:\n"
+            "  - HYPA filter: {result.hypa_hours_left} hours\n"
+            "  - Main brush: {result.main_brush_hours_left} hours\n"
+            "  - Mop: {result.mop_hours_left} hours\n"
+            "  - Side brush: {result.side_brush_hours_left} hours\n"
+            "* Life left:\n"
+            "  - HYPA filter: {result.hypa_life_left} %\n"
+            "  - Main brush: {result.main_brush_life_left} %\n"
+            "  - Mop: {result.mop_life_left} %\n"
+            "  - Side brush: {result.side_brush_life_left} %\n"
+            "\n"
+            "Map\n"
+            "===\n\n"
+            "Current map ID: {result.current_map_id}\n"
             "Remember map: {result.remember_map}\n"
             "Has map: {result.has_map}\n"
             "Has new map: {result.has_new_map}\n"
-            "Mop mode: {result.mop_mode}\n",
+            "Number of maps: {result.map_number}\n"
+            "\n"
+            "Misc\n"
+            "====\n\n"
+            "Hardware version: {result.hw_info}\n"
+            "Software version: {result.sw_info}\n"
+            "\n"
+            "Unknown properties\n"
+            "=================\n\n"
+            "Light state: {result.light_state}\n"
+            "Working: {result.working}\n"
+            "Charging: {result.charging}\n"
+            "Mop route: {result.mop_route}\n"
+            "Mop type: {result.mop_type}\n"
+            "Order time: {result.order_time}\n"
+            "Start time: {result.start_time}\n"
+            "v_state: {result.v_state}\n"
+            "water_percent: {result.water_percent}\n"
+            "zone_data: {result.zone_data}\n",
         )
     )
     def status(self) -> ViomiVacuumStatus:
         """Retrieve properties."""
         properties = [
-            "run_state",
-            "mode",
-            "err_state",
             "battary_life",
             "box_type",
-            "mop_type",
-            "s_time",
-            "s_area",
-            "suction_grade",
-            "water_grade",
-            "remember_map",
+            "cur_mapid",
+            "err_state",
             "has_map",
-            "is_mop",
             "has_newmap",
+            "hw_info",
+            "hypa_hours",
+            "hypa_life",
+            "is_charge",
+            "is_mop",
+            "is_work",
+            "light_state",
+            "main_brush_hours",
+            "main_brush_life",
+            "map_num",
+            "mode",
+            "mop_hours",
+            "mop_life",
+            "mop_route",
+            "mop_type",
+            "order_time",
+            "remember_map",
+            "repeat_state",
+            "run_state",
+            "s_area",
+            "s_time",
+            "side_brush_hours",
+            "side_brush_life",
+            "start_time",
+            "suction_grade",
+            "sw_info",
+            "v_state",
+            "water_grade",
+            "water_percent",
+            "zone_data",
         ]
 
         values = self.get_properties(properties)
