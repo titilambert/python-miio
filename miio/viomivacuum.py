@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from datetime import timedelta
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -604,3 +604,8 @@ class ViomiVacuum(Device):
     def fan_speed_presets(self) -> Dict[str, int]:
         """Return dictionary containing supported fanspeeds."""
         return {x.name: x.value for x in list(ViomiVacuumSpeed)}
+
+    @command()
+    def get_map_list(self) -> List(Dict[str, Any]):
+        """Return dictionary containing supported fanspeeds."""
+        return self.send("get_map", [])
