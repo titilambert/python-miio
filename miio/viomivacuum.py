@@ -606,6 +606,6 @@ class ViomiVacuum(Device):
         return {x.name: x.value for x in list(ViomiVacuumSpeed)}
 
     @command()
-    def get_map_list(self) -> List(Dict[str, Any]):
+    def get_map_list(self) -> List[Dict[str, Any]]:
         """Return dictionary containing supported fanspeeds."""
         return self.send("get_map", [])
