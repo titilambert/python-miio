@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from datetime import timedelta
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -239,15 +239,18 @@ class ViomiMopMode(Enum):
 
 class ViomiVacuumStatus:
     def __init__(self, data):
-        self._data = data
+        # ["run_state","mode","err_state","battary_life","box_type","mop_type","s_time","s_area",
+        # "suction_grade","water_grade","remember_map","has_map","is_mop","has_newmap"]'
+        # 1,               11,           1,            1,         1,       0          ]
+        self.data = data
 
     @property
     def state(self):
         """State of the vacuum."""
         try:
-            return ViomiVacuumState(self._data["run_state"])
+            return ViomiVacuumState(self.data["run_state"])
         except ValueError:
-            _LOGGER.warning("Unknown vacuum state: %s", self._data["run_state"])
+            _LOGGER.warning("Unknown vacuum state: %s", self.data["run_state"])
             return ViomiVacuumState.Unknown
 
     @property
@@ -265,17 +268,17 @@ class ViomiVacuumStatus:
 
         TODO: is this same as mop_type property?
         """
-        return ViomiMode(self._data["mode"])
+        return ViomiMode(self.data["mode"])
 
     @property
     def mop_type(self):
         """Unknown mop_type values."""
-        return self._data["mop_type"]
+        return self.data["mop_type"]
 
     @property
     def error_code(self) -> int:
         """Error code from vacuum."""
-        return self._data["err_state"]
+        return self.data["err_state"]
 
     @property
     def error(self) -> Optional[str]:
@@ -288,47 +291,47 @@ class ViomiVacuumStatus:
     @property
     def battery(self) -> int:
         """Battery in percentage."""
-        return self._data["battary_life"]
+        return self.data["battary_life"]
 
     @property
     def bin_type(self) -> ViomiBinType:
         """Type of the inserted bin."""
-        return ViomiBinType(self._data["box_type"])
+        return ViomiBinType(self.data["box_type"])
 
     @property
     def clean_time(self) -> timedelta:
         """Cleaning time."""
-        return pretty_seconds(self._data["s_time"])
+        return pretty_seconds(self.data["s_time"])
 
     @property
     def clean_area(self) -> float:
         """Cleaned area in square meters."""
-        return self._data["s_area"]
+        return self.data["s_area"]
 
     @property
     def fanspeed(self) -> ViomiVacuumSpeed:
         """Current fan speed."""
-        return ViomiVacuumSpeed(self._data["suction_grade"])
+        return ViomiVacuumSpeed(self.data["suction_grade"])
 
     @property
     def water_grade(self) -> ViomiWaterGrade:
         """Water grade."""
-        return ViomiWaterGrade(self._data["water_grade"])
+        return ViomiWaterGrade(self.data["water_grade"])
 
     @property
     def remember_map(self) -> bool:
         """True to remember the map."""
-        return bool(self._data["remember_map"])
+        return bool(self.data["remember_map"])
 
     @property
     def has_map(self) -> bool:
         """True if device has map?"""
-        return bool(self._data["has_map"])
+        return bool(self.data["has_map"])
 
     @property
     def has_new_map(self) -> bool:
         """TODO: unknown"""
-        return bool(self._data["has_newmap"])
+        return bool(self.data["has_newmap"])
 
     @property
     def mop_mode(self) -> ViomiMode:
@@ -336,117 +339,117 @@ class ViomiVacuumStatus:
 
         TODO: is this really the same as mode?
         """
-        return ViomiMode(self._data["is_mop"])
+        return ViomiMode(self.data["is_mop"])
 
     @property
     def current_map_id(self) -> float:
         """Current map id."""
-        return self._data["cur_mapid"]
+        return self.data["cur_mapid"]
 
     @property
     def hw_info(self) -> str:
         """Hardware info."""
-        return self._data["hw_info"]
+        return self.data["hw_info"]
 
     @property
     def sw_info(self) -> str:
         """SoftWare info."""
-        return self._data["sw_info"]
+        return self.data["sw_info"]
 
     @property
-    def hypa_hours_left(self) -> int:
+    def hepa_hours_left(self) -> timedelta:
         """HYPA left hours."""
-        return self._data["hypa_hours"]
+        return timedelta(self.data["hypa_hours"])
 
     @property
-    def hypa_life_left(self) -> int:
+    def hepa_life_left(self) -> int:
         """HYPA left life percent."""
-        return self._data["hypa_life"]
+        return self.data["hypa_life"]
 
     @property
     def charging(self) -> bool:
         """FIXME: True if device is charging?"""
-        return bool(self._data["is_charge"])
+        return bool(self.data["is_charge"])
 
     @property
     def working(self) -> bool:
         """FIXME: True if device is working?"""
-        return bool(self._data["is_work"])
+        return bool(self.data["is_work"])
 
     @property
     def light_state(self) -> bool:
         """FIXME: True if device ?"""
-        return bool(self._data["light_state"])
+        return bool(self.data["light_state"])
 
     @property
-    def main_brush_hours_left(self) -> int:
+    def main_brush_hours_left(self) -> timedelta:
         """Main brush left hours."""
-        return self._data["main_brush_hours"]
+        return timedelta(self.data["main_brush_hours"])
 
     @property
     def main_brush_life_left(self) -> int:
         """Main brush left life percent."""
-        return self._data["main_brush_life"]
+        return self.data["main_brush_life"]
 
     @property
     def map_number(self) -> int:
         """Number of saved maps."""
-        return self._data["map_num"]
+        return self.data["map_num"]
 
     @property
-    def mop_hours_left(self) -> int:
+    def mop_hours_left(self) -> timedelta:
         """Mop left hours."""
-        return self._data["mop_hours"]
+        return timedelta(self.data["mop_hours"])
 
     @property
     def mop_life_left(self) -> int:
         """Mop left life percent."""
-        return self._data["mop_life"]
+        return self.data["mop_life"]
 
     @property
     def mop_route(self) -> int:
         """FIXME: ??? int or bool."""
-        return self._data["mop_route"]
+        return self.data["mop_route"]
 
     @property
     def order_time(self) -> int:
         """FIXME: ??? int or bool."""
-        return self._data["order_time"]
+        return self.data["order_time"]
 
     @property
-    def repeat_state(self) -> int:
-        """FIXME: ??? int or bool."""
-        return self._data["repeat_state"]
+    def repeat_state(self) -> bool:
+        """Secondary clean up state."""
+        return self.data["repeat_state"]
 
     @property
-    def side_brush_hours_left(self) -> int:
+    def side_brush_hours_left(self) -> timedelta:
         """Side brush left hours."""
-        return self._data["side_brush_hours"]
+        return timedelta(self.data["side_brush_hours"])
 
     @property
     def side_brush_life_left(self) -> int:
         """Side brush left life percent."""
-        return self._data["side_brush_life"]
+        return self.data["side_brush_life"]
 
     @property
     def start_time(self) -> int:
         """FIXME: ??? int or bool."""
-        return self._data["start_time"]
+        return self.data["start_time"]
 
     @property
     def v_state(self) -> int:
         """FIXME: ??? int or bool."""
-        return self._data["v_state"]
+        return self.data["v_state"]
 
     @property
     def water_percent(self) -> int:
         """FIXME: ??? int or bool."""
-        return self._data["water_percent"]
+        return self.data["water_percent"]
 
     @property
     def zone_data(self) -> int:
         """FIXME: ??? int or bool."""
-        return self._data["zone_data"]
+        return self.data["zone_data"]
 
 
 class ViomiVacuum(Device):
@@ -467,16 +470,17 @@ class ViomiVacuum(Device):
             "Mop mode: {result.mop_mode}\n"
             "Clean time: {result.clean_time}\n"
             "Clean area: {result.clean_area}\n"
+            "Secondary Cleanup: {result.repeat_state}\n"
             "\n"
             "Consumables\n"
             "===========\n\n"
             "* Left hours:\n"
-            "  - HYPA filter: {result.hypa_hours_left} hours\n"
-            "  - Main brush: {result.main_brush_hours_left} hours\n"
-            "  - Mop: {result.mop_hours_left} hours\n"
-            "  - Side brush: {result.side_brush_hours_left} hours\n"
+            "  - HYPA filter: {result.hepa_hours_left}\n"
+            "  - Main brush: {result.main_brush_hours_left}\n"
+            "  - Mop: {result.mop_hours_left}\n"
+            "  - Side brush: {result.side_brush_hours_left}\n"
             "* Life left:\n"
-            "  - HYPA filter: {result.hypa_life_left} %\n"
+            "  - HEPA filter: {result.hepa_life_left} %\n"
             "  - Main brush: {result.main_brush_life_left} %\n"
             "  - Mop: {result.mop_life_left} %\n"
             "  - Side brush: {result.side_brush_life_left} %\n"
@@ -669,3 +673,24 @@ class ViomiVacuum(Device):
     def fan_speed_presets(self) -> Dict[str, int]:
         """Return dictionary containing supported fanspeeds."""
         return {x.name: x.value for x in list(ViomiVacuumSpeed)}
+
+    @command()
+    def get_maps(self) -> List[Dict[str, Any]]:
+        """Return map list."""
+        return self.send("get_map")
+
+    @command(click.argument("map_id", type=int))
+    def set_map(self, map_id: int):
+        """Change current map."""
+        maps = self.get_maps()
+        if map_id not in [m["id"] for m in maps]:
+            return "Map id {} doesn't exists".format(map_id)
+        return self.send("set_map", [map_id])
+
+    @command(click.argument("map_id", type=int))
+    def delete_map(self, map_id: int):
+        """Delete map."""
+        maps = self.get_maps()
+        if map_id not in [m["id"] for m in maps]:
+            return "Map id {} doesn't exists".format(map_id)
+        return self.send("del_map", [map_id])
