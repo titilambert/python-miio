@@ -237,6 +237,11 @@ class ViomiMopMode(Enum):
     Y = 1
 
 
+class ViomiVoiceState(Enum):
+    Off = 0
+    On = 5
+
+
 class ViomiVacuumStatus:
     def __init__(self, data):
         # ["run_state","mode","err_state","battary_life","box_type","mop_type","s_time","s_area",
@@ -437,9 +442,9 @@ class ViomiVacuumStatus:
         return self.data["start_time"]
 
     @property
-    def v_state(self) -> int:
-        """FIXME: ??? int or bool."""
-        return self.data["v_state"]
+    def voice_state(self) -> ViomiVoiceState:
+        """Voice state."""
+        return ViomiVoiceState(self.data["v_state"])
 
     @property
     def water_percent(self) -> int:
@@ -471,6 +476,7 @@ class ViomiVacuum(Device):
             "Clean time: {result.clean_time}\n"
             "Clean area: {result.clean_area}\n"
             "Secondary Cleanup: {result.repeat_state}\n"
+            "Voice state: {result.voice_state}\n"
             "\n"
             "Consumables\n"
             "===========\n\n"
@@ -507,7 +513,6 @@ class ViomiVacuum(Device):
             "Mop type: {result.mop_type}\n"
             "Order time: {result.order_time}\n"
             "Start time: {result.start_time}\n"
-            "v_state: {result.v_state}\n"
             "water_percent: {result.water_percent}\n"
             "zone_data: {result.zone_data}\n",
         )
