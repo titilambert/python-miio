@@ -674,6 +674,11 @@ class ViomiVacuum(Device):
         """Return dictionary containing supported fanspeeds."""
         return {x.name: x.value for x in list(ViomiVacuumSpeed)}
 
+    @command(click.argument("state", type=bool))
+    def set_repeat(self, state: bool):
+        """Set or Unset repeat mode."""
+        return self.send("set_repeat", [int(state)])
+
     @command()
     def get_maps(self) -> List[Dict[str, Any]]:
         """Return map list."""
