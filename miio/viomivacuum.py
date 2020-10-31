@@ -566,6 +566,9 @@ class ViomiVacuum(Device):
     def start(self):
         """Start cleaning."""
         # TODO figure out the parameters
+        # [actionMode, 1, roomIds.length]
+        # action == ?
+        # 1 = start, 3 = pause
         self.send("set_mode_withroom", [0, 1, 0])
 
     @command()
@@ -583,7 +586,7 @@ class ViomiVacuum(Device):
         """Set fanspeed [silent, standard, medium, turbo]."""
         self.send("set_suction", [speed.value])
 
-    @command(click.argument("watergrade"))
+    @command(click.argument("watergrade", type=EnumType(ViomiWaterGrade)))
     def set_water_grade(self, watergrade: ViomiWaterGrade):
         """Set water grade [low, medium, high]."""
         self.send("set_suction", [watergrade.value])
@@ -669,6 +672,11 @@ class ViomiVacuum(Device):
         """Switch the button leds on or off."""
         return self.send("set_light", [state.value])
 
+    @command(click.argument("state", type=EnumType(ViomiVoiceState)))
+    def set_voice(self, state: ViomiVoiceState):
+        """Switch the voice on or off."""
+        return self.send("set_voice", [state.value])
+
     @command(click.argument("mode", type=EnumType(ViomiCarpetTurbo)))
     def carpet_mode(self, mode: ViomiCarpetTurbo):
         """Set the carpet mode."""
@@ -704,3 +712,14 @@ class ViomiVacuum(Device):
         if map_id not in [m["id"] for m in maps]:
             return "Map id {} doesn't exists".format(map_id)
         return self.send("del_map", [map_id])
+
+    @command(
+        click.argument("map_id", type=int),
+        click.argument("map_name", type=str),
+    )
+    def rename_map(self, map_id: int, map_name: str):
+        """Rename map."""
+        maps = self.get_maps()
+        if map_id not in [m["id"] for m in maps]:
+            return "Map id {} doesn't exists".format(map_id)
+        return self.send("rename_map", {"mapID": map_id, "name": map_name})
