@@ -1,3 +1,4 @@
+import itertools
 import logging
 import time
 from collections import defaultdict
@@ -182,6 +183,12 @@ class ViomiVoiceState(Enum):
     On = 5
 
 
+class ViomiEdgeState(Enum):
+    Off = 0
+    Unknown = 1
+    On = 2
+
+
 class ViomiVacuumStatus:
     def __init__(self, data):
         # ["run_state","mode","err_state","battary_life","box_type","mop_type","s_time","s_area",
@@ -208,12 +215,14 @@ class ViomiVacuumStatus:
         return self.state in cleaning_states
 
     @property
-    def mode(self):
-        """Active mode.
+    def edge_state(self) -> ViomiEdgeState:
+        """Vaccum along the edges
 
-        TODO: is this same as mop_type property?
+        The settings is valid once
+        0: disabled
+        2: enabled
         """
-        return ViomiMode(self.data["mode"])
+        return ViomiEdgeState(self.data["mode"])
 
     @property
     def mop_type(self):
@@ -352,9 +361,9 @@ class ViomiVacuumStatus:
         return self.data["mop_life"]
 
     @property
-    def mop_route(self) -> int:
-        """FIXME: ??? int or bool."""
-        return self.data["mop_route"]
+    def mop_route(self) -> ViomiMopMode:
+        """Pattern mode."""
+        return ViomiMopMode(self.data["mop_route"])
 
     @property
     def order_time(self) -> int:
@@ -400,6 +409,30 @@ class ViomiVacuumStatus:
 class ViomiVacuum(Device):
     """Interface for Viomi vacuums (viomi.vacuum.v7)."""
 
+    def __init__(
+        self,
+        ip: str = None,
+        token: str = None,
+        start_id: int = 0,
+        debug: int = 0,
+        lazy_discover: bool = True,
+        timeout: int = 5,
+    ) -> None:
+        super().__init__(ip, token, start_id, debug, lazy_discover, timeout=0.5)
+
+    def send(
+        self,
+        command: str,
+        parameters: Any = None,
+        retry_count=20,
+        *,
+        extra_parameters=None,
+    ) -> Any:
+        # For retry_count to 20
+        return super().send(
+            command, parameters, retry_count=20, extra_parameters=extra_parameters
+        )
+
     @command(
         default_output=format_output(
             "\n",
@@ -407,16 +440,17 @@ class ViomiVacuum(Device):
             "=======\n\n"
             "State: {result.state}\n"
             "Battery status: {result.error}\n"
-            "Mode: {result.mode}\n"
             "Battery: {result.battery}\n"
             "Box type: {result.bin_type}\n"
             "Fan speed: {result.fanspeed}\n"
             "Water grade: {result.water_grade}\n"
             "Mop mode: {result.mop_mode}\n"
-            "Clean time: {result.clean_time}\n"
-            "Clean area: {result.clean_area}\n"
+            "Vacuum along the edges: {result.edge_state}\n"
+            "Mop route pattern: {result.mop_route}\n"
             "Secondary Cleanup: {result.repeat_state}\n"
             "Voice state: {result.voice_state}\n"
+            "Clean time: {result.clean_time}\n"
+            "Clean area: {result.clean_area}\n"
             "\n"
             "Consumables\n"
             "===========\n\n"
@@ -449,7 +483,6 @@ class ViomiVacuum(Device):
             "Light state: {result.light_state}\n"
             "Working: {result.working}\n"
             "Charging: {result.charging}\n"
-            "Mop route: {result.mop_route}\n"
             "Mop type: {result.mop_type}\n"
             "Order time: {result.order_time}\n"
             "Start time: {result.start_time}\n"
@@ -506,15 +539,40 @@ class ViomiVacuum(Device):
     def start(self):
         """Start cleaning."""
         # TODO figure out the parameters
-        # [actionMode, 1, roomIds.length]
+        # [actionMode, 1, roomIds.length, *list_of_room_ids]
         # action == ?
         # 1 = start, 3 = pause
+        # 3rd param of set_mode_withroom is room_array_len and next are
+        # room ids ([0, 1, 3, 11, 12, 13] = start cleaning rooms 11-13).
+        # room ids are encoded in map and it's part of cloud api so best way
+        # to get it is log between device <> mi home app
+        # (before map format is supported).
+        # "mode0": "Vacuum all",
+        # "mode1": "Vacuum all",
+        # "mode2": "Vacuum along the edges",
+        # "mode3": "Vacuum area",
+        # "mode4": "Vacuum spot",
+        # "mode10": "Vacuum & mop all",
+        # "mode11": "Vacuum & mop all",
+        # "mode12": "Vacuum & mop along the edges",
+        # "mode13": "Vacuum & mop area",
+        # "mode14": "Vacuum & mop spot",
+        # "mode20": "Mop all",
+        # "mode21": "Mop all",
+        # "mode22": "Mop along the edges",
+        # "mode23": "Mop area",
+        # "mode24": "Mop spot",
         self.send("set_mode_withroom", [0, 1, 0])
 
     @command()
     def stop(self):
-        """Stop cleaning."""
+        """FIXME: validate that Stop cleaning."""
         self.send("set_mode", [0])
+
+    @command(click.argument("state", type=EnumType(ViomiEdgeState)))
+    def set_edge(self, state: ViomiEdgeState):
+        """Set or Unset edge mode."""
+        return self.send("set_mode", [state.value])
 
     @command()
     def pause(self):
@@ -559,7 +617,8 @@ class ViomiVacuum(Device):
         self.send("set_mop", [mode.value])
 
     @command(click.argument("mop_mode", type=EnumType(ViomiMopMode)))
-    def mop_mode(self, mop_mode: ViomiMopMode):
+    def set_route_pattern(self, mop_mode: ViomiMopMode):
+        """Set the mop route pattern."""
         self.send("set_moproute", [mop_mode.value])
 
     @command()
@@ -637,6 +696,11 @@ class ViomiVacuum(Device):
         """Return map list."""
         return self.send("get_map")
 
+    @command(click.argument("state", type=bool))
+    def set_remember(self, state: bool):
+        """Set remenber map state."""
+        return self.send("set_remember", [int(state)])
+
     @command(click.argument("map_id", type=int))
     def set_map(self, map_id: int):
         """Change current map."""
@@ -663,3 +727,35 @@ class ViomiVacuum(Device):
         if map_id not in [m["id"] for m in maps]:
             return "Map id {} doesn't exists".format(map_id)
         return self.send("rename_map", {"mapID": map_id, "name": map_name})
+
+    @command(
+        click.option("--map-id", type=int, default=None),
+        click.option("--map-name", type=str, default=None),
+    )
+    def list_rooms(self, map_id: int, map_name: str):
+        # TODO set map_id default to None and use the current map_id
+        # if map_id is set, use set_map
+        if map_name:
+            map_id = None
+            maps = self.get_maps()
+            for map_ in maps:
+                if map_["name"] == map_name:
+                    map_id = map_["id"]
+            if map_id is None:
+                return "Error: Bad map name, should be in {}".format(
+                    ", ".join([m["name"] for m in maps])
+                )
+        elif map_id:
+            maps = self.get_maps()
+            if map_id not in [m["id"] for m in maps]:
+                return "Error: Bad map id, should be in {}".format(
+                    ", ".join([str(m["id"]) for m in maps])
+                )
+        # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/d73925c0106984a995d290e91a5ba4fcfe0b6444/index.js#L969
+        # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum#semi-automatic
+        ret = self.send("get_ordertime", [])
+        # ['1', '1', '32', '0', '0', '0', '1', '1', '11', '0', '1594139992', '2', '11', 'ami', '13', 'cuisine']
+        raw_rooms = ret[0].split("_")[12:]
+        rooms_iter = iter(raw_rooms)
+        rooms = dict(itertools.zip_longest(rooms_iter, rooms_iter, fillvalue=None))
+        return rooms
