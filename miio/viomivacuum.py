@@ -1,3 +1,39 @@
+"""Viomi Vacuum.
+
+
+Features:
+
+Main:
+- Dock - set_charge
+- Start/Pause - set_mode_withroom
+- Modes (Vacuum/Vacuum&Mop/Mop) - set_mop/id_mop
+- Fan Speed (Silent/Standard/Medium/Turbo) - set_suction/suction_grade
+- Water Level (Low/Medium/High) - set_suction/water_grade
+
+Settings:
+- Cleaning history - MISSING
+- Scheduled cleanup - get_ordertime
+- Vacuum along the edges - get_mode/set_mode
+- Secondary cleanup - set_repeat/repeat_state
+- Mop or vacuum & mod mode - set_moproute/mop_route
+- DND(DoNotDisturb) - set_notdisturb/get_notdisturb
+- Voice On/Off - set_voice/voice_state
+- Remember Map - voice_state
+- Virtual wall/restricted area - MISSING
+- Map list - get_maps/rename_map/delete_map/set_map
+- Area editor - MISSING
+- Reset map - MISSING
+- Device leveling - MISSING
+- Looking for the vacuum-mop - MISSING
+- Consumables statistics - get_properties
+- Remote Control - MISSING
+
+Misc:
+Battery - battery_life
+Language - set_language
+Led - set_light
+Rooms - get_ordertime (hack)
+"""
 import itertools
 import logging
 import time
@@ -171,7 +207,7 @@ class ViomiWaterGrade(Enum):
     High = 13
 
 
-class ViomiMopMode(Enum):
+class ViomiRoutePattern(Enum):
     """Mopping pattern."""
 
     S = 0
@@ -361,9 +397,9 @@ class ViomiVacuumStatus:
         return self.data["mop_life"]
 
     @property
-    def mop_route(self) -> ViomiMopMode:
+    def mop_route(self) -> ViomiRoutePattern:
         """Pattern mode."""
-        return ViomiMopMode(self.data["mop_route"])
+        return ViomiRoutePattern(self.data["mop_route"])
 
     @property
     def order_time(self) -> int:
@@ -616,8 +652,8 @@ class ViomiVacuum(Device):
         """Set the cleaning mode."""
         self.send("set_mop", [mode.value])
 
-    @command(click.argument("mop_mode", type=EnumType(ViomiMopMode)))
-    def set_route_pattern(self, mop_mode: ViomiMopMode):
+    @command(click.argument("mop_mode", type=EnumType(ViomiRoutePattern)))
+    def set_route_pattern(self, mop_mode: ViomiRoutePattern):
         """Set the mop route pattern."""
         self.send("set_moproute", [mop_mode.value])
 
