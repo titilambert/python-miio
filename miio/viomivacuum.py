@@ -1,9 +1,14 @@
 """Viomi Vacuum.
 
+# https://github.com/rytilahti/python-miio/issues/550#issuecomment-552780952
+# https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/ee10cbb3e98dba75d9c97791a6e1fcafc1281591/miio/lib/devices/vacuum.js
+# https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/ee10cbb3e98dba75d9c97791a6e1fcafc1281591/miio/lib/devices/viomivacuum.js
 
 Features:
 
 Main:
+- Area/Duration - Missing (get_clean_summary/get_clean_record
+- Battery - battery_life
 - Dock - set_charge
 - Start/Pause - set_mode_withroom
 - Modes (Vacuum/Vacuum&Mop/Mop) - set_mop/id_mop
@@ -11,7 +16,7 @@ Main:
 - Water Level (Low/Medium/High) - set_suction/water_grade
 
 Settings:
-- Cleaning history - MISSING
+- Cleaning history - MISSING (cleanRecord)
 - Scheduled cleanup - get_ordertime
 - Vacuum along the edges - get_mode/set_mode
 - Secondary cleanup - set_repeat/repeat_state
@@ -24,15 +29,17 @@ Settings:
 - Area editor - MISSING
 - Reset map - MISSING
 - Device leveling - MISSING
-- Looking for the vacuum-mop - MISSING
+- Looking for the vacuum-mop - MISSING (find_me)
 - Consumables statistics - get_properties
 - Remote Control - MISSING
 
 Misc:
-Battery - battery_life
-Language - set_language
-Led - set_light
-Rooms - get_ordertime (hack)
+- Get Properties
+- Language - set_language
+- Led - set_light
+- Rooms - get_ordertime (hack)
+- Clean History Path - MISSING (historyPath)
+- Map plan - MISSING (map_plan)
 """
 import itertools
 import logging
@@ -303,6 +310,11 @@ class ViomiVacuumStatus:
         """Current fan speed."""
         return ViomiVacuumSpeed(self.data["suction_grade"])
 
+    @command()
+    def fan_speed_presets(self) -> Dict[str, int]:
+        """Return dictionary containing supported fanspeeds."""
+        return {x.name: x.value for x in list(ViomiVacuumSpeed)}
+
     @property
     def water_grade(self) -> ViomiWaterGrade:
         """Water grade."""
@@ -571,6 +583,13 @@ class ViomiVacuum(Device):
 
         return ViomiVacuumStatus(defaultdict(lambda: None, zip(properties, values)))
 
+    # The following commands are available on the MAIN page
+    # in the Mi Home Android app
+    @command()
+    def home(self):
+        """Return to home."""
+        self.send("set_charge", [1])
+
     @command()
     def start(self):
         """Start cleaning."""
@@ -601,66 +620,81 @@ class ViomiVacuum(Device):
         self.send("set_mode_withroom", [0, 1, 0])
 
     @command()
-    def stop(self):
-        """FIXME: validate that Stop cleaning."""
-        self.send("set_mode", [0])
-
-    @command(click.argument("state", type=EnumType(ViomiEdgeState)))
-    def set_edge(self, state: ViomiEdgeState):
-        """Set or Unset edge mode."""
-        return self.send("set_mode", [state.value])
-
-    @command()
     def pause(self):
         """Pause cleaning."""
         self.send("set_mode_withroom", [0, 2, 0])
 
+    @command()
+    def stop(self):
+        """FIXME: validate that Stop cleaning."""
+        self.send("set_mode", [0])
+
+    @command(click.argument("mode", type=EnumType(ViomiMode)))
+    def clean_mode(self, mode: ViomiMode):
+        """Set the cleaning mode.
+
+        [vacuum, vacuumAndMop, mop, cleanzone, cleanspot]
+        """
+        self.send("set_mop", [mode.value])
+
     @command(click.argument("speed", type=EnumType(ViomiVacuumSpeed)))
     def set_fan_speed(self, speed: ViomiVacuumSpeed):
-        """Set fanspeed [silent, standard, medium, turbo]."""
+        """Set fanspeed.
+
+        [silent, standard, medium, turbo]
+        """
         self.send("set_suction", [speed.value])
 
     @command(click.argument("watergrade", type=EnumType(ViomiWaterGrade)))
     def set_water_grade(self, watergrade: ViomiWaterGrade):
-        """Set water grade [low, medium, high]."""
+        """Set water grade.
+
+        [low, medium, high]
+        """
         self.send("set_suction", [watergrade.value])
 
+    # The following commands are available on the SETTINGS page
+    # in the Mi Home Android app
+
+    # MISSING cleaning history
+
     @command()
-    def home(self):
-        """Return to home."""
-        self.send("set_charge", [1])
+    def get_scheduled_cleanup(self):
+        # Needs to reads and understand the return of:
+        # self.send("get_ordertime", [])
+        # [id, enabled, repeatdays, hour, minute, ?, ? , ?, ?, ?, ?, nb_of_rooms, room_id, room_name, room_id, room_name, ...]
+        return "Not Implemented yet."
 
-    @command(
-        click.argument("direction", type=EnumType(ViomiMovementDirection)),
-        click.option(
-            "--duration",
-            type=float,
-            default=0.5,
-            help="number of seconds to perform this movement",
-        ),
-    )
-    def move(self, direction: ViomiMovementDirection, duration=0.5):
-        """Manual movement."""
-        start = time.time()
-        while time.time() - start < duration:
-            self.send("set_direction", [direction.value])
-            time.sleep(0.1)
-        self.send("set_direction", [ViomiMovementDirection.Stop.value])
+    @command()
+    def set_scheduled_cleanup(self):
+        # Needs to reads and understand:
+        # self.send("set_ordertime", [????])
+        return "Not Implemented yet."
 
-    @command(click.argument("mode", type=EnumType(ViomiMode)))
-    def clean_mode(self, mode: ViomiMode):
-        """Set the cleaning mode."""
-        self.send("set_mop", [mode.value])
+    @command()
+    def del_scheduled_cleanup(self):
+        # Needs to reads and understand:
+        # self.send("det_ordertime", [shedule_id])
+        return "Not Implemented yet."
+
+    @command(click.argument("state", type=EnumType(ViomiEdgeState)))
+    def set_edge(self, state: ViomiEdgeState):
+        """Set or Unset edge mode.
+
+        Vacuum along the edges
+        The settings is valid once
+        """
+        return self.send("set_mode", [state.value])
+
+    @command(click.argument("state", type=bool))
+    def set_repeat(self, state: bool):
+        """Set or Unset repeat mode."""
+        return self.send("set_repeat", [int(state)])
 
     @command(click.argument("mop_mode", type=EnumType(ViomiRoutePattern)))
     def set_route_pattern(self, mop_mode: ViomiRoutePattern):
         """Set the mop route pattern."""
         self.send("set_moproute", [mop_mode.value])
-
-    @command()
-    def consumable_status(self) -> ViomiConsumableStatus:
-        """Return information about consumables."""
-        return ViomiConsumableStatus(self.send("get_consumables"))
 
     @command()
     def dnd_status(self):
@@ -697,45 +731,22 @@ class ViomiVacuum(Device):
             [0 if disable else 1, start_hr, start_min, end_hr, end_min],
         )
 
-    @command(click.argument("language", type=EnumType(ViomiLanguage)))
-    def set_language(self, language: ViomiLanguage):
-        """Set the device's audio language."""
-        return self.send("set_language", [language.value])
-
-    @command(click.argument("state", type=EnumType(ViomiLedState)))
-    def led(self, state: ViomiLedState):
-        """Switch the button leds on or off."""
-        return self.send("set_light", [state.value])
-
     @command(click.argument("state", type=EnumType(ViomiVoiceState)))
     def set_voice(self, state: ViomiVoiceState):
         """Switch the voice on or off."""
         return self.send("set_voice", [state.value])
 
-    @command(click.argument("mode", type=EnumType(ViomiCarpetTurbo)))
-    def carpet_mode(self, mode: ViomiCarpetTurbo):
-        """Set the carpet mode."""
-        return self.send("set_carpetturbo", [mode.value])
-
-    @command()
-    def fan_speed_presets(self) -> Dict[str, int]:
-        """Return dictionary containing supported fanspeeds."""
-        return {x.name: x.value for x in list(ViomiVacuumSpeed)}
-
     @command(click.argument("state", type=bool))
-    def set_repeat(self, state: bool):
-        """Set or Unset repeat mode."""
-        return self.send("set_repeat", [int(state)])
+    def set_remember(self, state: bool):
+        """Set remenber map state."""
+        return self.send("set_remember", [int(state)])
+
+    # MISSING: Virtual wall/restricted area
 
     @command()
     def get_maps(self) -> List[Dict[str, Any]]:
         """Return map list."""
         return self.send("get_map")
-
-    @command(click.argument("state", type=bool))
-    def set_remember(self, state: bool):
-        """Set remenber map state."""
-        return self.send("set_remember", [int(state)])
 
     @command(click.argument("map_id", type=int))
     def set_map(self, map_id: int):
@@ -769,8 +780,6 @@ class ViomiVacuum(Device):
         click.option("--map-name", type=str, default=None),
     )
     def list_rooms(self, map_id: int, map_name: str):
-        # TODO set map_id default to None and use the current map_id
-        # if map_id is set, use set_map
         if map_name:
             map_id = None
             maps = self.get_maps()
@@ -789,9 +798,81 @@ class ViomiVacuum(Device):
                 )
         # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/d73925c0106984a995d290e91a5ba4fcfe0b6444/index.js#L969
         # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum#semi-automatic
-        ret = self.send("get_ordertime", [])
+        schedules = self.send("get_ordertime", [])
         # ['1', '1', '32', '0', '0', '0', '1', '1', '11', '0', '1594139992', '2', '11', 'ami', '13', 'cuisine']
-        raw_rooms = ret[0].split("_")[12:]
-        rooms_iter = iter(raw_rooms)
-        rooms = dict(itertools.zip_longest(rooms_iter, rooms_iter, fillvalue=None))
+        # [id, enabled, repeatdays, hour, minute, ?, ? , ?, ?, ?, ?, nb_of_rooms, room_id, room_name, room_id, room_name, ...]
+        # Find ALL specific scheduled cleanupS containing the room ids
+        rooms = {}
+        scheduled_found = False
+        for raw_schedule in schedules:
+            schedule = raw_schedule.split("_")
+            # Scheduled cleanup needs to be scheduled for 00:00 and inactive
+            if schedule[1] == "0" and schedule[3] == "0" and schedule[4] == "0":
+                scheduled_found = True
+                raw_rooms = schedule[12:]
+                rooms_iter = iter(raw_rooms)
+                rooms.update(
+                    dict(itertools.zip_longest(rooms_iter, rooms_iter, fillvalue=None))
+                )
+
+        if not scheduled_found:
+            msg = (
+                "Fake schedule not found. "
+                "Please create a scheduled cleanup with the "
+                "following properties:\n"
+                "* Hour: 00\n"
+                "* Minute: 00\n"
+                "* Select all the rooms one by one\n"
+                "* Set as inactive scheduled cleanup\n"
+            )
+            return msg
+
         return rooms
+
+    # MISSING Area editor
+
+    # MISSING Reset map
+
+    # MISSING Device leveling
+
+    # MISSING Looking for the vacuum-mop
+
+    @command()
+    def consumable_status(self) -> ViomiConsumableStatus:
+        """Return information about consumables."""
+        return ViomiConsumableStatus(self.send("get_consumables"))
+
+    @command(
+        click.argument("direction", type=EnumType(ViomiMovementDirection)),
+        click.option(
+            "--duration",
+            type=float,
+            default=0.5,
+            help="number of seconds to perform this movement",
+        ),
+    )
+    def move(self, direction: ViomiMovementDirection, duration=0.5):
+        """Manual movement."""
+        start = time.time()
+        while time.time() - start < duration:
+            self.send("set_direction", [direction.value])
+            time.sleep(0.1)
+        self.send("set_direction", [ViomiMovementDirection.Stop.value])
+
+    # The following commands don't seem to be available
+    # in the Mi Home Android app
+
+    @command(click.argument("language", type=EnumType(ViomiLanguage)))
+    def set_language(self, language: ViomiLanguage):
+        """Set the device's audio language."""
+        return self.send("set_language", [language.value])
+
+    @command(click.argument("state", type=EnumType(ViomiLedState)))
+    def led(self, state: ViomiLedState):
+        """Switch the button leds on or off."""
+        return self.send("set_light", [state.value])
+
+    @command(click.argument("mode", type=EnumType(ViomiCarpetTurbo)))
+    def carpet_mode(self, mode: ViomiCarpetTurbo):
+        """Set the carpet mode."""
+        return self.send("set_carpetturbo", [mode.value])
