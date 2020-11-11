@@ -60,6 +60,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 ERROR_CODES = {
+    0: "Sleeping and not charging",
     500: "Radar timed out",
     501: "Wheels stuck",
     502: "Low battery",
@@ -467,6 +468,7 @@ class ViomiVacuum(Device):
         timeout: int = 5,
     ) -> None:
         super().__init__(ip, token, start_id, debug, lazy_discover, timeout=0.5)
+        self._cache = {"edge_state": None, "rooms": {}}
 
     def send(
         self,
@@ -593,41 +595,72 @@ class ViomiVacuum(Device):
     @command()
     def start(self):
         """Start cleaning."""
-        # TODO figure out the parameters
-        # [actionMode, 1, roomIds.length, *list_of_room_ids]
-        # action == ?
-        # 1 = start, 3 = pause
+        # params: [edge, 1, roomIds.length, *list_of_room_ids]
+        # - edge: see ViomiEdgeState
+        # - 1: start cleaning (2 pause, 0 stop)
+        # - roomIds.length
+        # - *room_id_list
         # 3rd param of set_mode_withroom is room_array_len and next are
         # room ids ([0, 1, 3, 11, 12, 13] = start cleaning rooms 11-13).
         # room ids are encoded in map and it's part of cloud api so best way
         # to get it is log between device <> mi home app
         # (before map format is supported).
-        # "mode0": "Vacuum all",
-        # "mode1": "Vacuum all",
-        # "mode2": "Vacuum along the edges",
-        # "mode3": "Vacuum area",
-        # "mode4": "Vacuum spot",
-        # "mode10": "Vacuum & mop all",
-        # "mode11": "Vacuum & mop all",
-        # "mode12": "Vacuum & mop along the edges",
-        # "mode13": "Vacuum & mop area",
-        # "mode14": "Vacuum & mop spot",
-        # "mode20": "Mop all",
-        # "mode21": "Mop all",
-        # "mode22": "Mop along the edges",
-        # "mode23": "Mop area",
-        # "mode24": "Mop spot",
-        self.send("set_mode_withroom", [0, 1, 0])
+        self._cache["edge_state"] = self.get_properties(["mode"])
+        self.send("set_mode_withroom", self._cache["edge_state"] + [1, 0])
+
+    @command(
+        click.option(
+            "--rooms",
+            "-r",
+            multiple=True,
+            help="Rooms name or room id. Can be used multiple times",
+        )
+    )
+    def start_with_room(self, rooms):
+        """Start cleaning specific rooms."""
+        if not self._cache["rooms"]:
+            self.list_rooms()
+            if not self._cache["rooms"]:
+                return
+        # TODO Handle rooms with the same name
+        reverse_rooms = {v: k for k, v in self._cache["rooms"].items()}
+        room_ids = []
+        for room in rooms:
+            if room in self._cache["rooms"]:
+                room_ids.append(room)
+            elif room in reverse_rooms:
+                room_ids.append(reverse_rooms[room])
+            else:
+                return "Rooms {} is unknown, it should be in '{}' " "or in '{}'".format(
+                    room,
+                    ", ".join(self._cache["rooms"].keys()),
+                    ", ".join(self._cache["rooms"].values()),
+                )
+        self._cache["edge_state"] = self.get_properties(["mode"])
+        self.send(
+            "set_mode_withroom",
+            self._cache["edge_state"] + [1, 0, len(room_ids)] + room_ids,
+        )
 
     @command()
     def pause(self):
         """Pause cleaning."""
-        self.send("set_mode_withroom", [0, 2, 0])
+        # params: [edge_state, 0]
+        # - edge: see ViomiEdgeState
+        # - 2: pause cleaning
+        if not self._cache["edge_state"]:
+            self._cache["edge_state"] = self.get_properties(["mode"])
+        self.send("set_mode", self._cache["edge_state"] + [2])
 
     @command()
     def stop(self):
         """FIXME: validate that Stop cleaning."""
-        self.send("set_mode", [0])
+        # params: [edge_state, 0]
+        # - edge: see ViomiEdgeState
+        # - 0: stop cleaning
+        if not self._cache["edge_state"]:
+            self._cache["edge_state"] = self.get_properties(["mode"])
+        self.send("set_mode", self._cache["edge_state"] + [0])
 
     @command(click.argument("mode", type=EnumType(ViomiMode)))
     def clean_mode(self, mode: ViomiMode):
@@ -660,6 +693,7 @@ class ViomiVacuum(Device):
 
     @command()
     def get_scheduled_cleanup(self):
+        """Not implemented yet."""
         # Needs to reads and understand the return of:
         # self.send("get_ordertime", [])
         # [id, enabled, repeatdays, hour, minute, ?, ? , ?, ?, ?, ?, nb_of_rooms, room_id, room_name, room_id, room_name, ...]
@@ -667,12 +701,14 @@ class ViomiVacuum(Device):
 
     @command()
     def set_scheduled_cleanup(self):
+        """Not implemented yet."""
         # Needs to reads and understand:
         # self.send("set_ordertime", [????])
         return "Not Implemented yet."
 
     @command()
     def del_scheduled_cleanup(self):
+        """Not implemented yet."""
         # Needs to reads and understand:
         # self.send("det_ordertime", [shedule_id])
         return "Not Implemented yet."
@@ -778,8 +814,14 @@ class ViomiVacuum(Device):
     @command(
         click.option("--map-id", type=int, default=None),
         click.option("--map-name", type=str, default=None),
+        click.option("--refresh", type=bool, default=False),
     )
-    def list_rooms(self, map_id: int, map_name: str):
+    def list_rooms(
+        self, map_id: int = None, map_name: str = None, refresh: bool = False
+    ):
+        """Return room ids and names."""
+        if self._cache["rooms"] and not refresh:
+            return self._cache["rooms"]
         if map_name:
             map_id = None
             maps = self.get_maps()
@@ -827,6 +869,7 @@ class ViomiVacuum(Device):
             )
             return msg
 
+        self._cache["rooms"] = rooms
         return rooms
 
     # MISSING Area editor
@@ -864,15 +907,24 @@ class ViomiVacuum(Device):
 
     @command(click.argument("language", type=EnumType(ViomiLanguage)))
     def set_language(self, language: ViomiLanguage):
-        """Set the device's audio language."""
+        """Set the device's audio language.
+
+        This seems doing nothing on STYJ02YM
+        """
         return self.send("set_language", [language.value])
 
     @command(click.argument("state", type=EnumType(ViomiLedState)))
     def led(self, state: ViomiLedState):
-        """Switch the button leds on or off."""
+        """Switch the button leds on or off.
+
+        This seems doing nothing on STYJ02YM
+        """
         return self.send("set_light", [state.value])
 
     @command(click.argument("mode", type=EnumType(ViomiCarpetTurbo)))
     def carpet_mode(self, mode: ViomiCarpetTurbo):
-        """Set the carpet mode."""
+        """Set the carpet mode.
+
+        This seems doing nothing on STYJ02YM
+        """
         return self.send("set_carpetturbo", [mode.value])
