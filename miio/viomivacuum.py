@@ -91,6 +91,8 @@ ERROR_CODES = {
 class ViomiConsumableStatus(ConsumableStatus):
     def __init__(self, data: List[int]) -> None:
         # [17, 17, 17, 17]
+        print("GGG")
+        print(data)
         self.data = [d * 60 * 60 for d in data]
         self.side_brush_total = timedelta(hours=180)
         self.main_brush_total = timedelta(hours=360)
@@ -270,7 +272,11 @@ class ViomiVacuumStatus:
 
     @property
     def mop_type(self):
-        """Unknown mop_type values."""
+        """TODO: need to try to remove the mop and see the value.
+
+        In android app the function 'getIsMopByBoxMopType' gather it
+        Unknown mop_type values.
+        """
         return self.data["mop_type"]
 
     @property
@@ -333,15 +339,12 @@ class ViomiVacuumStatus:
 
     @property
     def has_new_map(self) -> bool:
-        """TODO: unknown"""
+        """True if the device has scanned a new map (like a new floor)."""
         return bool(self.data["has_newmap"])
 
     @property
     def mop_mode(self) -> ViomiMode:
-        """Whether mopping is enabled and if so which mode
-
-        TODO: is this really the same as mode?
-        """
+        """Whether mopping is enabled and if so which mode"""
         return ViomiMode(self.data["is_mop"])
 
     @property
@@ -355,18 +358,13 @@ class ViomiVacuumStatus:
         return self.data["hw_info"]
 
     @property
-    def sw_info(self) -> str:
-        """SoftWare info."""
-        return self.data["sw_info"]
-
-    @property
     def hepa_hours_left(self) -> timedelta:
-        """HYPA left hours."""
+        """HEPA left hours."""
         return timedelta(self.data["hypa_hours"])
 
     @property
     def hepa_life_left(self) -> int:
-        """HYPA left life percent."""
+        """HEPA left life percent."""
         return self.data["hypa_life"]
 
     @property
@@ -376,12 +374,18 @@ class ViomiVacuumStatus:
 
     @property
     def working(self) -> bool:
-        """FIXME: True if device is working?"""
+        """FIXME: True if device is working?
+
+        It's True even when the device is sleeping at the dock.
+        """
         return bool(self.data["is_work"])
 
     @property
     def light_state(self) -> bool:
-        """FIXME: True if device ?"""
+        """Led state.
+
+        This seems doing nothing on STYJ02YM
+        """
         return bool(self.data["light_state"])
 
     @property
@@ -488,6 +492,7 @@ class ViomiVacuum(Device):
             "\n",
             "General\n"
             "=======\n\n"
+            "Hardware version: {result.hw_info}\n"
             "State: {result.state}\n"
             "Battery status: {result.error}\n"
             "Battery: {result.battery}\n"
@@ -522,11 +527,6 @@ class ViomiVacuum(Device):
             "Has map: {result.has_map}\n"
             "Has new map: {result.has_new_map}\n"
             "Number of maps: {result.map_number}\n"
-            "\n"
-            "Misc\n"
-            "====\n\n"
-            "Hardware version: {result.hw_info}\n"
-            "Software version: {result.sw_info}\n"
             "\n"
             "Unknown properties\n"
             "=================\n\n"
@@ -574,11 +574,13 @@ class ViomiVacuum(Device):
             "side_brush_life",
             "start_time",
             "suction_grade",
-            "sw_info",
             "v_state",
             "water_grade",
             "water_percent",
             "zone_data",
+            # The following list of properties existing but
+            # there are not used in the code
+            # "sw_info",
         ]
 
         values = self.get_properties(properties)
@@ -619,10 +621,10 @@ class ViomiVacuum(Device):
     def start_with_room(self, rooms):
         """Start cleaning specific rooms."""
         if not self._cache["rooms"]:
-            self.list_rooms()
+            self.get_rooms()
             if not self._cache["rooms"]:
                 return
-        # TODO Handle rooms with the same name
+        # FIXME Handle rooms with the same name
         reverse_rooms = {v: k for k, v in self._cache["rooms"].items()}
         room_ids = []
         for room in rooms:
@@ -654,7 +656,7 @@ class ViomiVacuum(Device):
 
     @command()
     def stop(self):
-        """FIXME: validate that Stop cleaning."""
+        """Validate that Stop cleaning."""
         # params: [edge_state, 0]
         # - edge: see ViomiEdgeState
         # - 0: stop cleaning
@@ -781,7 +783,12 @@ class ViomiVacuum(Device):
 
     @command()
     def get_maps(self) -> List[Dict[str, Any]]:
-        """Return map list."""
+        """Return map list.
+
+        [{'name': 'MapName1', 'id': 1598622255, 'cur': False},
+         {'name': 'MapName2', 'id': 1599508355, 'cur': True},
+          ...]
+        """
         return self.send("get_map")
 
     @command(click.argument("map_id", type=int))
@@ -816,7 +823,7 @@ class ViomiVacuum(Device):
         click.option("--map-name", type=str, default=None),
         click.option("--refresh", type=bool, default=False),
     )
-    def list_rooms(
+    def get_rooms(
         self, map_id: int = None, map_name: str = None, refresh: bool = False
     ):
         """Return room ids and names."""
@@ -864,7 +871,13 @@ class ViomiVacuum(Device):
                 "following properties:\n"
                 "* Hour: 00\n"
                 "* Minute: 00\n"
-                "* Select all the rooms one by one\n"
+                "* Select all (minus one) the rooms one by one\n"
+                "* Set as inactive scheduled cleanup\n"
+                "Then create a scheduled cleanup with the room missed at "
+                "previous step with the following properties:\n"
+                "* Hour: 00\n"
+                "* Minute: 00\n"
+                "* Select only the missed room\n"
                 "* Set as inactive scheduled cleanup\n"
             )
             return msg
