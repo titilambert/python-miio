@@ -53,6 +53,7 @@ import click
 
 from .click_common import EnumType, command, format_output
 from .device import Device
+from .exceptions import ViomiVacuumException
 from .utils import pretty_seconds
 from .vacuumcontainers import ConsumableStatus, DNDStatus
 
@@ -91,8 +92,6 @@ ERROR_CODES = {
 class ViomiConsumableStatus(ConsumableStatus):
     def __init__(self, data: List[int]) -> None:
         # [17, 17, 17, 17]
-        print("GGG")
-        print(data)
         self.data = [d * 60 * 60 for d in data]
         self.side_brush_total = timedelta(hours=180)
         self.main_brush_total = timedelta(hours=360)
@@ -148,9 +147,6 @@ class ViomiConsumableStatus(ConsumableStatus):
                 self.mop,
             )
         )
-
-    def __json__(self):
-        return self.data
 
 
 class ViomiVacuumSpeed(Enum):
@@ -358,16 +354,6 @@ class ViomiVacuumStatus:
         return self.data["hw_info"]
 
     @property
-    def hepa_hours_left(self) -> timedelta:
-        """HEPA left hours."""
-        return timedelta(self.data["hypa_hours"])
-
-    @property
-    def hepa_life_left(self) -> int:
-        """HEPA left life percent."""
-        return self.data["hypa_life"]
-
-    @property
     def charging(self) -> bool:
         """FIXME: True if device is charging?"""
         return bool(self.data["is_charge"])
@@ -389,29 +375,9 @@ class ViomiVacuumStatus:
         return bool(self.data["light_state"])
 
     @property
-    def main_brush_hours_left(self) -> timedelta:
-        """Main brush left hours."""
-        return timedelta(self.data["main_brush_hours"])
-
-    @property
-    def main_brush_life_left(self) -> int:
-        """Main brush left life percent."""
-        return self.data["main_brush_life"]
-
-    @property
     def map_number(self) -> int:
         """Number of saved maps."""
         return self.data["map_num"]
-
-    @property
-    def mop_hours_left(self) -> timedelta:
-        """Mop left hours."""
-        return timedelta(self.data["mop_hours"])
-
-    @property
-    def mop_life_left(self) -> int:
-        """Mop left life percent."""
-        return self.data["mop_life"]
 
     @property
     def mop_route(self) -> ViomiRoutePattern:
@@ -427,16 +393,6 @@ class ViomiVacuumStatus:
     def repeat_state(self) -> bool:
         """Secondary clean up state."""
         return self.data["repeat_state"]
-
-    @property
-    def side_brush_hours_left(self) -> timedelta:
-        """Side brush left hours."""
-        return timedelta(self.data["side_brush_hours"])
-
-    @property
-    def side_brush_life_left(self) -> int:
-        """Side brush left life percent."""
-        return self.data["side_brush_life"]
 
     @property
     def start_time(self) -> int:
@@ -462,17 +418,7 @@ class ViomiVacuumStatus:
 class ViomiVacuum(Device):
     """Interface for Viomi vacuums (viomi.vacuum.v7)."""
 
-    def __init__(
-        self,
-        ip: str = None,
-        token: str = None,
-        start_id: int = 0,
-        debug: int = 0,
-        lazy_discover: bool = True,
-        timeout: int = 5,
-    ) -> None:
-        super().__init__(ip, token, start_id, debug, lazy_discover, timeout=0.5)
-        self._cache = {"edge_state": None, "rooms": {}}
+    _cache = {"edge_state": None, "rooms": {}}
 
     def send(
         self,
@@ -505,20 +451,7 @@ class ViomiVacuum(Device):
             "Secondary Cleanup: {result.repeat_state}\n"
             "Voice state: {result.voice_state}\n"
             "Clean time: {result.clean_time}\n"
-            "Clean area: {result.clean_area}\n"
-            "\n"
-            "Consumables\n"
-            "===========\n\n"
-            "* Left hours:\n"
-            "  - HYPA filter: {result.hepa_hours_left}\n"
-            "  - Main brush: {result.main_brush_hours_left}\n"
-            "  - Mop: {result.mop_hours_left}\n"
-            "  - Side brush: {result.side_brush_hours_left}\n"
-            "* Life left:\n"
-            "  - HEPA filter: {result.hepa_life_left} %\n"
-            "  - Main brush: {result.main_brush_life_left} %\n"
-            "  - Mop: {result.mop_life_left} %\n"
-            "  - Side brush: {result.side_brush_life_left} %\n"
+            "Clean area: {result.clean_area} m²\n"
             "\n"
             "Map\n"
             "===\n\n"
@@ -550,18 +483,12 @@ class ViomiVacuum(Device):
             "has_map",
             "has_newmap",
             "hw_info",
-            "hypa_hours",
-            "hypa_life",
             "is_charge",
             "is_mop",
             "is_work",
             "light_state",
-            "main_brush_hours",
-            "main_brush_life",
             "map_num",
             "mode",
-            "mop_hours",
-            "mop_life",
             "mop_route",
             "mop_type",
             "order_time",
@@ -570,8 +497,6 @@ class ViomiVacuum(Device):
             "run_state",
             "s_area",
             "s_time",
-            "side_brush_hours",
-            "side_brush_life",
             "start_time",
             "suction_grade",
             "v_state",
@@ -581,14 +506,20 @@ class ViomiVacuum(Device):
             # The following list of properties existing but
             # there are not used in the code
             # "sw_info",
+            # "main_brush_hours",
+            # "main_brush_life",
+            # "side_brush_hours",
+            # "side_brush_life",
+            # "mop_hours",
+            # "mop_life",
+            # "hypa_hours",
+            # "hypa_life",
         ]
 
         values = self.get_properties(properties)
 
         return ViomiVacuumStatus(defaultdict(lambda: None, zip(properties, values)))
 
-    # The following commands are available on the MAIN page
-    # in the Mi Home Android app
     @command()
     def home(self):
         """Return to home."""
@@ -622,9 +553,6 @@ class ViomiVacuum(Device):
         """Start cleaning specific rooms."""
         if not self._cache["rooms"]:
             self.get_rooms()
-            if not self._cache["rooms"]:
-                return
-        # FIXME Handle rooms with the same name
         reverse_rooms = {v: k for k, v in self._cache["rooms"].items()}
         room_ids = []
         for room in rooms:
@@ -688,9 +616,6 @@ class ViomiVacuum(Device):
         """
         self.send("set_suction", [watergrade.value])
 
-    # The following commands are available on the SETTINGS page
-    # in the Mi Home Android app
-
     # MISSING cleaning history
 
     @command()
@@ -699,21 +624,21 @@ class ViomiVacuum(Device):
         # Needs to reads and understand the return of:
         # self.send("get_ordertime", [])
         # [id, enabled, repeatdays, hour, minute, ?, ? , ?, ?, ?, ?, nb_of_rooms, room_id, room_name, room_id, room_name, ...]
-        return "Not Implemented yet."
+        raise NotImplementedError()
 
     @command()
     def set_scheduled_cleanup(self):
         """Not implemented yet."""
         # Needs to reads and understand:
         # self.send("set_ordertime", [????])
-        return "Not Implemented yet."
+        raise NotImplementedError()
 
     @command()
     def del_scheduled_cleanup(self):
         """Not implemented yet."""
         # Needs to reads and understand:
         # self.send("det_ordertime", [shedule_id])
-        return "Not Implemented yet."
+        raise NotImplementedError()
 
     @command(click.argument("state", type=EnumType(ViomiEdgeState)))
     def set_edge(self, state: ViomiEdgeState):
@@ -796,7 +721,7 @@ class ViomiVacuum(Device):
         """Change current map."""
         maps = self.get_maps()
         if map_id not in [m["id"] for m in maps]:
-            return "Map id {} doesn't exists".format(map_id)
+            raise ViomiVacuumException("Map id {} doesn't exists".format(map_id))
         return self.send("set_map", [map_id])
 
     @command(click.argument("map_id", type=int))
@@ -804,7 +729,7 @@ class ViomiVacuum(Device):
         """Delete map."""
         maps = self.get_maps()
         if map_id not in [m["id"] for m in maps]:
-            return "Map id {} doesn't exists".format(map_id)
+            raise ViomiVacuumException("Map id {} doesn't exists".format(map_id))
         return self.send("del_map", [map_id])
 
     @command(
@@ -815,7 +740,7 @@ class ViomiVacuum(Device):
         """Rename map."""
         maps = self.get_maps()
         if map_id not in [m["id"] for m in maps]:
-            return "Map id {} doesn't exists".format(map_id)
+            raise ViomiVacuumException("Map id {} doesn't exists".format(map_id))
         return self.send("rename_map", {"mapID": map_id, "name": map_name})
 
     @command(
@@ -836,14 +761,18 @@ class ViomiVacuum(Device):
                 if map_["name"] == map_name:
                     map_id = map_["id"]
             if map_id is None:
-                return "Error: Bad map name, should be in {}".format(
-                    ", ".join([m["name"] for m in maps])
+                raise ViomiVacuumException(
+                    "Error: Bad map name, should be in {}".format(
+                        ", ".join([m["name"] for m in maps])
+                    )
                 )
         elif map_id:
             maps = self.get_maps()
             if map_id not in [m["id"] for m in maps]:
-                return "Error: Bad map id, should be in {}".format(
-                    ", ".join([str(m["id"]) for m in maps])
+                raise ViomiVacuumException(
+                    "Error: Bad map id, should be in {}".format(
+                        ", ".join([str(m["id"]) for m in maps])
+                    )
                 )
         # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/d73925c0106984a995d290e91a5ba4fcfe0b6444/index.js#L969
         # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum#semi-automatic
@@ -880,7 +809,7 @@ class ViomiVacuum(Device):
                 "* Select only the missed room\n"
                 "* Set as inactive scheduled cleanup\n"
             )
-            return msg
+            raise ViomiVacuumException(msg)
 
         self._cache["rooms"] = rooms
         return rooms
@@ -914,9 +843,6 @@ class ViomiVacuum(Device):
             self.send("set_direction", [direction.value])
             time.sleep(0.1)
         self.send("set_direction", [ViomiMovementDirection.Stop.value])
-
-    # The following commands don't seem to be available
-    # in the Mi Home Android app
 
     @command(click.argument("language", type=EnumType(ViomiLanguage)))
     def set_language(self, language: ViomiLanguage):
