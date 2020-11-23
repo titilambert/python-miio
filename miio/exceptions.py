@@ -32,3 +32,7 @@ class DeviceError(DeviceException):
 
 class RecoverableError(DeviceError):
     """Exception communicating an recoverable error delivered by the target device."""
+
+
+class ViomiVacuumException(DeviceException):
+    """Exception raised by Viomi Vacuum."""

@@ -259,14 +259,10 @@ class Listener:
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        for address in info.addresses:
-            addr = str(ipaddress.ip_address(address))
-            if addr == "192.168.15.110":
-                continue
-            print(addr)
-            if addr not in self.found_devices:
-                dev = self.check_and_create_device(info, addr)
-                self.found_devices[addr] = dev
+        addr = str(ipaddress.ip_address(info.address))
+        if addr not in self.found_devices:
+            dev = self.check_and_create_device(info, addr)
+            self.found_devices[addr] = dev
 
 
 class Discovery:
