@@ -147,7 +147,12 @@ class Device(metaclass=DeviceGroupMeta):
         :param int retry_count: How many times to retry on error
         :param dict extra_parameters: Extra top-level parameters
         """
+<<<<<<< HEAD
         retry_count = retry_count if retry_count is not None else self.retry_count
+=======
+        if hasattr(self, "retry_count"):
+            retry_count = self.retry_count
+>>>>>>> 84abee5 (Try to fix PR comments)
         return self._protocol.send(
             command, parameters, retry_count, extra_parameters=extra_parameters
         )

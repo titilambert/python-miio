@@ -435,19 +435,8 @@ class ViomiVacuum(Device):
     """Interface for Viomi vacuums (viomi.vacuum.v7)."""
 
     _cache = {"edge_state": None, "rooms": {}}
-
-    def send(
-        self,
-        command: str,
-        parameters: Any = None,
-        retry_count=20,
-        *,
-        extra_parameters=None,
-    ) -> Any:
-        # For retry_count to 20
-        return super().send(
-            command, parameters, retry_count=20, extra_parameters=extra_parameters
-        )
+    timeout = 0.6
+    retry_count = 20
 
     @command(
         default_output=format_output(
