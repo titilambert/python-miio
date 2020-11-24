@@ -229,6 +229,7 @@ class ViomiEdgeState(Enum):
     Off = 0
     Unknown = 1
     On = 2
+    Unknown2 = 5
 
 
 class ViomiVacuumStatus:
@@ -263,17 +264,18 @@ class ViomiVacuumStatus:
         The settings is valid once
         0: disabled
         2: enabled
+        5: unknown
         """
         return ViomiEdgeState(self.data["mode"])
 
     @property
-    def mop_type(self):
-        """TODO: need to try to remove the mop and see the value.
+    def mop_installed(self) -> bool:
+        """Mop installed status
 
-        In android app the function 'getIsMopByBoxMopType' gather it
-        Unknown mop_type values.
+        True if the mop is installed
+        False if the mop is NOT installed
         """
-        return self.data["mop_type"]
+        return bool(self.data["mop_type"])
 
     @property
     def error_code(self) -> int:
@@ -355,16 +357,30 @@ class ViomiVacuumStatus:
 
     @property
     def charging(self) -> bool:
-        """FIXME: True if device is charging?"""
-        return bool(self.data["is_charge"])
+        """Battery is charging or not.
+
+        is_charge is 1 when the battery is not charging
+        is_charge is 0 when the device is charging
+        Note: When the battery is at 100% is_charge is 1
+
+        Return:
+        - True if the battery is charging
+        - False if the battery is NOT charging
+        """
+        return self.data["is_charge"]
 
     @property
     def working(self) -> bool:
-        """FIXME: True if device is working?
+        """Device is working or not.
 
-        It's True even when the device is sleeping at the dock.
+        is_work is 1 when the device is not working
+        is_work is 0 when the device is working
+
+        Return:
+        - True if the device is working
+        - False if the device is NOT working
         """
-        return bool(self.data["is_work"])
+        return not bool(self.data["is_work"])
 
     @property
     def light_state(self) -> bool:
@@ -440,12 +456,15 @@ class ViomiVacuum(Device):
             "=======\n\n"
             "Hardware version: {result.hw_info}\n"
             "State: {result.state}\n"
+            "Working: {result.working}\n"
             "Battery status: {result.error}\n"
             "Battery: {result.battery}\n"
+            "Charging: {result.charging}\n"
             "Box type: {result.bin_type}\n"
             "Fan speed: {result.fanspeed}\n"
             "Water grade: {result.water_grade}\n"
             "Mop mode: {result.mop_mode}\n"
+            "Mop installed: {result.mop_installed}\n"
             "Vacuum along the edges: {result.edge_state}\n"
             "Mop route pattern: {result.mop_route}\n"
             "Secondary Cleanup: {result.repeat_state}\n"
@@ -464,9 +483,6 @@ class ViomiVacuum(Device):
             "Unknown properties\n"
             "=================\n\n"
             "Light state: {result.light_state}\n"
-            "Working: {result.working}\n"
-            "Charging: {result.charging}\n"
-            "Mop type: {result.mop_type}\n"
             "Order time: {result.order_time}\n"
             "Start time: {result.start_time}\n"
             "water_percent: {result.water_percent}\n"
