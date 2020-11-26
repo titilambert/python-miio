@@ -135,6 +135,7 @@ class ViomiConsumableStatus(ConsumableStatus):
 
     @property
     def mop_left(self) -> timedelta:
+        """How long until the mop should be changed."""
         return self.sensor_dirty_total - self.sensor_dirty
 
     def __repr__(self) -> str:
@@ -229,7 +230,6 @@ class ViomiEdgeState(Enum):
     Off = 0
     Unknown = 1
     On = 2
-    Unknown2 = 5
 
 
 class ViomiVacuumStatus:
@@ -435,7 +435,7 @@ class ViomiVacuum(Device):
     """Interface for Viomi vacuums (viomi.vacuum.v7)."""
 
     _cache = {"edge_state": None, "rooms": {}}
-    timeout = 0.6
+    timeout = 0.5
     retry_count = 20
 
     @command(
