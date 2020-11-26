@@ -51,6 +51,8 @@ from typing import Any, Dict, List, Optional
 
 import click
 
+from PIL import Image, ImageDraw
+
 from .click_common import EnumType, command, format_output
 from .device import Device
 from .exceptions import ViomiVacuumException
@@ -147,6 +149,45 @@ class ViomiConsumableStatus(ConsumableStatus):
                 self.filter,
                 self.mop,
             )
+        )
+
+
+class ViomiPositionPoint:
+    def __init__(self, pos_x, pos_y, phi, update, plan_multiplicator=1):
+        self._pos_x = pos_x
+        self._pos_y = pos_y
+        self.phi = phi
+        self.update = update
+        self._plan_multiplicator = plan_multiplicator
+
+    @property
+    def pos_x(self):
+        """X coordonate with multiplicator."""
+        return self._pos_x * self._plan_multiplicator
+
+    @property
+    def pos_y(self):
+        """Y coordonate with multiplicator."""
+        return self._pos_y * self._plan_multiplicator
+
+    def image_pos_x(self, offset, img_center):
+        """X coordonate on an image."""
+        return self.pos_x - offset + img_center
+
+    def image_pos_y(self, offset, img_center):
+        """Y coordonate on an image."""
+        return self.pos_y - offset + img_center
+
+    def __repr__(self) -> str:
+        return "<ViomiPositionPoint x: {}, y: {}, phi: {}, update {}".format(
+            self.pos_x, self.pos_y, self.phi, self.update
+        )
+
+    def __eq__(self, value) -> bool:
+        return (
+            self.pos_x == value.pos_x
+            and self.pos_y == value.pos_y
+            and self.phi == value.phi
         )
 
 
@@ -620,6 +661,138 @@ class ViomiVacuum(Device):
         [low, medium, high]
         """
         self.send("set_suction", [watergrade.value])
+
+    def get_positions(self, plan_multiplicator=1) -> [ViomiPositionPoint]:
+        """Return the current positions
+
+        returns: [x, y, phi, update, x, y, phi, update, x, y, phi, update, ...]
+        """
+        results = self.send("get_curpos", [])
+        positions = []
+        # Group result 4 by 4
+        for result in [i for i in zip(*(results[i::4] for i in range(4)))]:
+            positions.append(
+                ViomiPositionPoint(*result, plan_multiplicator=plan_multiplicator)
+            )
+        return positions
+
+    @command()
+    def get_current_position(self) -> ViomiPositionPoint:
+        """Return the current position"""
+        positions = self.get_positions()
+        if positions:
+            return positions[-1]
+        return None
+
+    @command(click.argument("output", type=click.Path(dir_okay=False, writable=True)))
+    def follow_position(self, output):
+        """Draw a map of the track made by the Vacuum."""
+        no_pos_found = 0
+        wait_time = 1
+
+        image_size = 10000
+        image_margin = 20
+        plan_multiplicator = image_size / 10
+        image = Image.new("RGB", (image_size, image_size), "white")
+        draw = ImageDraw.Draw(image)
+
+        img_center = image_size / 2
+
+        position_history = []
+        # ScaleUp the position to have more precision
+        positions = self.get_positions(plan_multiplicator=plan_multiplicator)
+        if not positions:
+            return
+
+        while no_pos_found < 5:
+            for position in positions:
+                if position in position_history:
+                    # Avoid position duplication
+                    continue
+                elif not position_history:
+                    # Handle first point
+                    # Set the middle of the image as starting point
+                    offset_x = position.pos_x
+                    offset_y = position.pos_y
+                    position_history.append(position)
+                elif position and position != position_history[-1]:
+                    # Handle other points
+                    start_point = (
+                        position_history[-1].image_pos_x(offset_x, img_center),
+                        position_history[-1].image_pos_y(offset_y, img_center),
+                    )
+                    end_point = (
+                        position.image_pos_x(offset_x, img_center),
+                        position.image_pos_y(offset_y, img_center),
+                    )
+                    draw.line([start_point, end_point], "black", 1, joint=None)
+                    position_history.append(position)
+
+                    # Get box corner for cropping
+                    min_x = (
+                        min(
+                            [
+                                p.image_pos_x(offset_x, img_center)
+                                for p in position_history
+                            ]
+                        )
+                        - image_margin
+                    )
+                    max_x = (
+                        max(
+                            [
+                                p.image_pos_x(offset_x, img_center)
+                                for p in position_history
+                            ]
+                        )
+                        + image_margin
+                    )
+                    min_y = (
+                        min(
+                            [
+                                p.image_pos_y(offset_y, img_center)
+                                for p in position_history
+                            ]
+                        )
+                        - image_margin
+                    )
+                    max_y = (
+                        max(
+                            [
+                                p.image_pos_y(offset_y, img_center)
+                                for p in position_history
+                            ]
+                        )
+                        + image_margin
+                    )
+                    # Crop image
+                    image_output = image.crop((min_x, min_y, max_x, max_y))
+                    # Flip the image to get it correctly
+                    image_output = image_output.transpose(Image.FLIP_TOP_BOTTOM)
+                    image_output.save(output, "PNG")
+
+            try:
+                # Get new positions
+                positions = self.get_positions(plan_multiplicator=plan_multiplicator)
+            except Exception as exp:
+                # Sometimes we get a token error
+                # We just have to wait before new query
+                time.sleep(wait_time * 4)
+                _LOGGER.warning("Warning, got error requesting vacuum: %s", exp)
+
+                positions = []
+                continue
+
+            if not positions:
+                # Sometimes there is no new position
+                # We just have to wait to get new ones
+                no_pos_found += 1
+                _LOGGER.warning("No new position found")
+                time.sleep(wait_time)
+            else:
+                no_pos_found = 0
+            # we need to wait a bit to not overload the vacuum
+            time.sleep(wait_time)
 
     # MISSING cleaning history
 
