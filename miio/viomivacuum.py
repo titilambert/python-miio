@@ -42,7 +42,10 @@ Misc:
 - Map plan - MISSING (map_plan)
 """
 import itertools
+import json
 import logging
+import os
+import pathlib
 import time
 from collections import defaultdict
 from datetime import timedelta
@@ -50,8 +53,15 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import click
+from appdirs import user_cache_dir
 
-from .click_common import EnumType, command, format_output
+from .click_common import (
+    DeviceGroup,
+    EnumType,
+    GlobalContextObject,
+    command,
+    format_output,
+)
 from .device import Device
 from .exceptions import ViomiVacuumException
 from .utils import pretty_seconds
@@ -222,7 +232,7 @@ class ViomiRoutePattern(Enum):
 
 
 class ViomiVoiceState(Enum):
-    Off = 0
+    Off = 1
     On = 5
 
 
@@ -367,7 +377,7 @@ class ViomiVacuumStatus:
         - True if the battery is charging
         - False if the battery is NOT charging
         """
-        return self.data["is_charge"]
+        return not (bool(self.data["is_charge"]))
 
     @property
     def working(self) -> bool:
@@ -437,6 +447,14 @@ class ViomiVacuum(Device):
     _cache = {"edge_state": None, "rooms": {}}
     timeout = 0.5
     retry_count = 20
+
+    def __init__(
+        self, ip: str, token: str = None, start_id: int = 0, debug: int = 0
+    ) -> None:
+        super().__init__(ip, token, start_id, debug)
+        self.manual_seqnum = -1
+        # self.model = None
+        # self._fanspeeds = FanspeedV1
 
     @command(
         default_output=format_output(
@@ -702,7 +720,7 @@ class ViomiVacuum(Device):
     @command(click.argument("state", type=EnumType(ViomiVoiceState)))
     def set_voice(self, state: ViomiVoiceState):
         """Switch the voice on or off."""
-        return self.send("set_voice", [state.value])
+        return self.send("set_voice", [1, state.value])
 
     @command(click.argument("state", type=bool))
     def set_remember(self, state: bool):
@@ -872,3 +890,55 @@ class ViomiVacuum(Device):
         This seems doing nothing on STYJ02YM
         """
         return self.send("set_carpetturbo", [mode.value])
+
+    @classmethod
+    def get_device_group(cls):
+        @click.pass_context
+        def callback(ctx, *args, id_file, **kwargs):
+            gco = ctx.find_object(GlobalContextObject)
+            if gco:
+                kwargs["debug"] = gco.debug
+
+            start_id = manual_seq = 0
+            try:
+                with open(id_file, "r") as f:
+                    x = json.load(f)
+                    start_id = x.get("seq", 0)
+                    manual_seq = x.get("manual_seq", 0)
+                    _LOGGER.debug("Read stored sequence ids: %s", x)
+            except (FileNotFoundError, TypeError, ValueError):
+                pass
+
+            ctx.obj = cls(*args, start_id=start_id, **kwargs)
+            ctx.obj.manual_seqnum = manual_seq
+
+        dg = DeviceGroup(
+            cls,
+            params=DeviceGroup.DEFAULT_PARAMS
+            + [
+                click.Option(
+                    ["--id-file"],
+                    type=click.Path(dir_okay=False, writable=True),
+                    default=os.path.join(
+                        user_cache_dir("python-miio"), "python-mirobo.seq"
+                    ),
+                )
+            ],
+            callback=callback,
+        )
+
+        @dg.resultcallback()
+        @dg.device_pass
+        def cleanup(vac: ViomiVacuum, *args, **kwargs):
+            if vac.ip is None:  # dummy Device for discovery, skip teardown
+                return
+            id_file = kwargs["id_file"]
+            seqs = {"seq": vac._protocol.raw_id, "manual_seq": vac.manual_seqnum}
+            _LOGGER.debug("Writing %s to %s", seqs, id_file)
+            path_obj = pathlib.Path(id_file)
+            cache_dir = path_obj.parents[0]
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            with open(id_file, "w") as f:
+                json.dump(seqs, f)
+
+        return dg
