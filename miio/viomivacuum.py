@@ -63,7 +63,7 @@ from .click_common import (
     format_output,
 )
 from .device import Device
-from .exceptions import ViomiVacuumException
+from .exceptions import DeviceException
 from .utils import pretty_seconds
 from .vacuumcontainers import ConsumableStatus, DNDStatus
 
@@ -97,6 +97,10 @@ ERROR_CODES = {
     2103: "Charging",
     2105: "Fully charged",
 }
+
+
+class ViomiVacuumException(DeviceException):
+    """Exception raised by Viomi Vacuum."""
 
 
 class ViomiConsumableStatus(ConsumableStatus):
@@ -259,32 +263,19 @@ class ViomiVacuumStatus:
             return ViomiVacuumState.Unknown
 
     @property
-    def is_on(self) -> bool:
-        """True if cleaning."""
-        cleaning_states = [
-            ViomiVacuumState.Cleaning,
-            ViomiVacuumState.VacuumingAndMopping,
-        ]
-        return self.state in cleaning_states
-
-    @property
     def edge_state(self) -> ViomiEdgeState:
         """Vaccum along the edges
 
         The settings is valid once
-        0: disabled
-        2: enabled
-        5: unknown
+        0: Off
+        1: Unknown
+        2: On
         """
         return ViomiEdgeState(self.data["mode"])
 
     @property
     def mop_installed(self) -> bool:
-        """Mop installed status
-
-        True if the mop is installed
-        False if the mop is NOT installed
-        """
+        """True if the mop is installed."""
         return bool(self.data["mop_type"])
 
     @property
@@ -367,29 +358,15 @@ class ViomiVacuumStatus:
 
     @property
     def charging(self) -> bool:
-        """Battery is charging or not.
+        """True if battery is charging
 
-        is_charge is 1 when the battery is not charging
-        is_charge is 0 when the device is charging
-        Note: When the battery is at 100% is_charge is 1
-
-        Return:
-        - True if the battery is charging
-        - False if the battery is NOT charging
+        Note: When the battery is at 100%, device reports that it is not charging.
         """
-        return not (bool(self.data["is_charge"]))
+        return not bool(self.data["is_charge"])
 
     @property
-    def working(self) -> bool:
-        """Device is working or not.
-
-        is_work is 1 when the device is not working
-        is_work is 0 when the device is working
-
-        Return:
-        - True if the device is working
-        - False if the device is NOT working
-        """
+    def is_on(self) -> bool:
+        """True if device is working."""
         return not bool(self.data["is_work"])
 
     @property
@@ -463,7 +440,7 @@ class ViomiVacuum(Device):
             "=======\n\n"
             "Hardware version: {result.hw_info}\n"
             "State: {result.state}\n"
-            "Working: {result.working}\n"
+            "Working: {result.is_on}\n"
             "Battery status: {result.error}\n"
             "Battery: {result.battery}\n"
             "Charging: {result.charging}\n"
@@ -625,10 +602,7 @@ class ViomiVacuum(Device):
 
     @command(click.argument("speed", type=EnumType(ViomiVacuumSpeed)))
     def set_fan_speed(self, speed: ViomiVacuumSpeed):
-        """Set fanspeed.
-
-        [silent, standard, medium, turbo]
-        """
+        """Set fanspeed [silent, standard, medium, turbo]."""
         self.send("set_suction", [speed.value])
 
     @command(click.argument("watergrade", type=EnumType(ViomiWaterGrade)))
