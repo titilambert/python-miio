@@ -236,8 +236,17 @@ class ViomiRoutePattern(Enum):
 
 
 class ViomiVoiceState(Enum):
-    Off = 1
-    On = 5
+    Off = 0
+    Level_10 = 1
+    Level_20 = 2
+    Level_30 = 3
+    Level_40 = 4
+    Level_50 = 5
+    Level_60 = 6
+    Level_70 = 7
+    Level_80 = 8
+    Level_90 = 9
+    Level_100 = 10
 
 
 class ViomiEdgeState(Enum):
@@ -404,7 +413,7 @@ class ViomiVacuumStatus:
 
     @property
     def voice_state(self) -> ViomiVoiceState:
-        """Voice state."""
+        """Voice volume level (from 0 to 100%, 0 means Off)."""
         return ViomiVoiceState(self.data["v_state"])
 
     @property
