@@ -93,6 +93,45 @@ class ViomiVacuumException(DeviceException):
     """Exception raised by Viomi Vacuum."""
 
 
+class ViomiPositionPoint:
+    def __init__(self, pos_x, pos_y, phi, update, plan_multiplicator=1):
+        self._pos_x = pos_x
+        self._pos_y = pos_y
+        self.phi = phi
+        self.update = update
+        self._plan_multiplicator = plan_multiplicator
+
+    @property
+    def pos_x(self):
+        """X coordonate with multiplicator."""
+        return self._pos_x * self._plan_multiplicator
+
+    @property
+    def pos_y(self):
+        """Y coordonate with multiplicator."""
+        return self._pos_y * self._plan_multiplicator
+
+    def image_pos_x(self, offset, img_center):
+        """X coordonate on an image."""
+        return self.pos_x - offset + img_center
+
+    def image_pos_y(self, offset, img_center):
+        """Y coordonate on an image."""
+        return self.pos_y - offset + img_center
+
+    def __repr__(self) -> str:
+        return "<ViomiPositionPoint x: {}, y: {}, phi: {}, update {}".format(
+            self.pos_x, self.pos_y, self.phi, self.update
+        )
+
+    def __eq__(self, value) -> bool:
+        return (
+            self.pos_x == value.pos_x
+            and self.pos_y == value.pos_y
+            and self.phi == value.phi
+        )
+
+
 class ViomiConsumableStatus(ConsumableStatus):
     def __init__(self, data: List[int]) -> None:
         # [17, 17, 17, 17]
@@ -665,6 +704,28 @@ class ViomiVacuum(Device):
         [low, medium, high]
         """
         self.send("set_suction", [watergrade.value])
+
+    def get_positions(self, plan_multiplicator=1) -> [ViomiPositionPoint]:
+        """Return the last positions
+
+        returns: [x, y, phi, update, x, y, phi, update, x, y, phi, update, ...]
+        """
+        results = self.send("get_curpos", [])
+        positions = []
+        # Group result 4 by 4
+        for result in [i for i in zip(*(results[i::4] for i in range(4)))]:
+            positions.append(
+                ViomiPositionPoint(*result, plan_multiplicator=plan_multiplicator)
+            )
+        return positions
+
+    @command()
+    def get_current_position(self) -> ViomiPositionPoint:
+        """Return the current position"""
+        positions = self.get_positions()
+        if positions:
+            return positions[-1]
+        return None
 
     # MISSING cleaning history
 
