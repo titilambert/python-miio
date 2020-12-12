@@ -47,7 +47,7 @@ import time
 from collections import defaultdict
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 
@@ -417,6 +417,60 @@ class ViomiVacuumStatus:
         return self.data["zone_data"]
 
 
+def _get_rooms_from_schedules(schedules: List[str]) -> Tuple[bool, Dict]:
+    """Read the result of "get_ordertime" command to extract room names and ids.
+
+    The `schedules` input needs to follow the following format
+    * ['1_0_32_0_0_0_1_1_11_0_1594139992_2_11_room1_13_room2', ...]
+    * [Id_Enabled_Repeatdays_Hour_Minute_?_? _?_?_?_?_NbOfRooms_RoomId_RoomName_RoomId_RoomName_..., ...]
+
+    The function parse get_ordertime output to find room names and ids
+    To use this function you need:
+    1. to create a scheduled cleanup with the following properties:
+    * Hour: 00
+    * Minute: 00
+    * Select all (minus one) the rooms one by one
+    * Set as inactive scheduled cleanup
+    2. then to create an other scheduled cleanup with the room missed at
+       previous step with the following properties:
+    * Hour: 00
+    * Minute: 00
+    * Select only the missed room
+    * Set as inactive scheduled cleanup
+
+    More information:
+    * https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/d73925c0106984a995d290e91a5ba4fcfe0b6444/index.js#L969
+    * https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum#semi-automatic
+
+
+    >>> _parse_schedules(['1_0_32_0_0_0_1_1_11_0_1594139992_2_11_room1_13_room2'])
+    (True, {'11': 'room1', '13': 'room2'})
+    >>> _parse_schedules(['1_0_32_0_0_0_1_1_11_0_1594139992_2_11_room1_13_room2', '1_0_32_0_0_0_1_1_11_0_1594139992_2_10_room3_14_room4'])
+    (True, {'11': 'room1', '13': 'room2', '10': 'room3', '14': 'room4'})
+    >>> _parse_schedules(['1_1_32_0_0_0_1_1_11_0_1594139992_2_11_room1_13_room2', '1_0_32_0_0_0_1_1_11_0_1594139992_2_10_room3_14_room4'])
+    (True, {'10': 'room3', '14': 'room4'})
+    >>> _parse_schedules(['1_0_32_2_0_0_1_1_11_0_1594139992_2_11_room1_13_room2', '1_0_32_0_4_0_1_1_11_0_1594139992_2_10_room3_14_room4'])
+    (False, {})
+    >>> _parse_schedules(['1_1_32_0_0_0_1_1_11_0_1594139992_2_11_room1_13_room2'])
+    (False, {})
+    >>> _parse_schedules([])
+    (False, {})
+    """
+    rooms = {}
+    scheduled_found = False
+    for raw_schedule in schedules:
+        schedule = raw_schedule.split("_")
+        # Scheduled cleanup needs to be scheduled for 00:00 and inactive
+        if schedule[1] == "0" and schedule[3] == "0" and schedule[4] == "0":
+            scheduled_found = True
+            raw_rooms = schedule[12:]
+            rooms_iter = iter(raw_rooms)
+            rooms.update(
+                dict(itertools.zip_longest(rooms_iter, rooms_iter, fillvalue=None))
+            )
+    return scheduled_found, rooms
+
+
 class ViomiVacuum(Device):
     """Interface for Viomi vacuums (viomi.vacuum.v7)."""
 
@@ -770,25 +824,9 @@ class ViomiVacuum(Device):
                         ", ".join([str(m["id"]) for m in maps])
                     )
                 )
-        # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum/blob/d73925c0106984a995d290e91a5ba4fcfe0b6444/index.js#L969
-        # https://github.com/homebridge-xiaomi-roborock-vacuum/homebridge-xiaomi-roborock-vacuum#semi-automatic
+        # Get scheduled cleanup
         schedules = self.send("get_ordertime", [])
-        # ['1', '1', '32', '0', '0', '0', '1', '1', '11', '0', '1594139992', '2', '11', 'ami', '13', 'cuisine']
-        # [id, enabled, repeatdays, hour, minute, ?, ? , ?, ?, ?, ?, nb_of_rooms, room_id, room_name, room_id, room_name, ...]
-        # Find ALL specific scheduled cleanupS containing the room ids
-        rooms = {}
-        scheduled_found = False
-        for raw_schedule in schedules:
-            schedule = raw_schedule.split("_")
-            # Scheduled cleanup needs to be scheduled for 00:00 and inactive
-            if schedule[1] == "0" and schedule[3] == "0" and schedule[4] == "0":
-                scheduled_found = True
-                raw_rooms = schedule[12:]
-                rooms_iter = iter(raw_rooms)
-                rooms.update(
-                    dict(itertools.zip_longest(rooms_iter, rooms_iter, fillvalue=None))
-                )
-
+        scheduled_found, rooms = _get_rooms_from_schedules(schedules)
         if not scheduled_found:
             msg = (
                 "Fake schedule not found. "
