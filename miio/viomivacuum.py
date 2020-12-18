@@ -342,7 +342,7 @@ class ViomiVacuumStatus:
     @property
     def clean_time(self) -> timedelta:
         """Cleaning time."""
-        return pretty_seconds(self.data["s_time"])
+        return pretty_seconds(self.data["s_time"] * 60)
 
     @property
     def clean_area(self) -> float:
@@ -513,9 +513,9 @@ def _get_rooms_from_schedules(schedules: List[str]) -> Tuple[bool, Dict]:
 class ViomiVacuum(Device):
     """Interface for Viomi vacuums (viomi.vacuum.v7)."""
 
-    _cache = {"edge_state": None, "rooms": {}}
-    timeout = 0.5
-    retry_count = 20
+    _cache = {"edge_state": None, "rooms": {}, "maps": {}}
+    timeout = 5
+    retry_count = 10
 
     def __init__(
         self, ip: str, token: str = None, start_id: int = 0, debug: int = 0
@@ -825,7 +825,9 @@ class ViomiVacuum(Device):
          {'name': 'MapName2', 'id': 1599508355, 'cur': True},
           ...]
         """
-        return self.send("get_map")
+        if not self._cache["maps"]:
+            self._cache["maps"] = self.send("get_map")
+        return self._cache["maps"]
 
     @command(click.argument("map_id", type=int))
     def set_map(self, map_id: int):
