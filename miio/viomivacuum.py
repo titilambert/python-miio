@@ -282,6 +282,9 @@ class ViomiEdgeState(Enum):
     Off = 0
     Unknown = 1
     On = 2
+    # NOTE: When I got 5, the device was super slow
+    # Shutdown and restart device fixed the issue
+    Unknown2 = 5
 
 
 class ViomiVacuumStatus:
@@ -308,6 +311,7 @@ class ViomiVacuumStatus:
         0: Off
         1: Unknown
         2: On
+        5: Unknown
         """
         return ViomiEdgeState(self.data["mode"])
 
@@ -808,7 +812,10 @@ class ViomiVacuum(Device):
     @command(click.argument("state", type=EnumType(ViomiVoiceState)))
     def set_voice(self, state: ViomiVoiceState):
         """Switch the voice on or off."""
-        return self.send("set_voice", [1, state.value])
+        enabled = 1
+        if state.value == 0:
+            enabled = 0
+        return self.send("set_voice", [enabled, state.value])
 
     @command(click.argument("state", type=bool))
     def set_remember(self, state: bool):
